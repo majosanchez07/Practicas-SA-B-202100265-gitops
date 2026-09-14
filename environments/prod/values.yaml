@@ -1,0 +1,231 @@
+# ==============================================================================
+# Ambiente: PRODUCCION
+#
+# Practica 8 — Maria Jose Tebalan Sanchez — 202100265
+#
+# ESTE ARCHIVO ES EL PUNTO DE CONTACTO ENTRE EL PIPELINE Y EL CLUSTER.
+#
+# El pipeline de integracion continua no despliega nada. Lo unico que hace,
+# cuando una version supera todos los controles -pruebas, helm lint, politicas
+# de Kyverno, Trivy sin CVE criticas, firma de Cosign verificada- es abrir un
+# Pull Request que cambia UNA linea de este archivo: imageTag.
+#
+# Al fusionarse ese Pull Request, ArgoCD detecta el cambio y sincroniza. Argo
+# Rollouts toma entonces el control y promueve la nueva version de forma
+# progresiva, revirtiendo sola si el analisis falla.
+#
+# En otras palabras: todo el poder que el pipeline tiene sobre produccion cabe
+# en la linea que dice imageTag.
+# ==============================================================================
+
+global:
+  # --------------------------------------------------------------------------
+  # LA LINEA QUE EL PIPELINE MODIFICA
+  #
+  # Deriva siempre de un tag de Git (v1.0.0 -> 1.0.0), como exige el enunciado.
+  # La etiqueta "latest" esta prohibida y el pipeline falla si aparece.
+  # --------------------------------------------------------------------------
+  imageTag: "1.0.0"
+
+# ------------------------------------------------------------------------------
+# Registro de imagenes
+#
+# Se declara en imageRegistry (local al chart) y NO en global.imageRegistry,
+# por el motivo que explica el helper sa-platform.image: global lo heredan
+# tambien los subcharts de Bitnami, de modo que postgresql y rabbitmq buscarian
+# su imagen dentro de este repositorio, donde no existe, y quedarian en
+# ImagePullBackOff.
+#
+# La ruta completa de cada componente queda:
+#   ghcr.io/majosanchez07/practicas-sa-b-202100265/p8-api-gateway:1.0.0
+#   \______________ imageRegistry ______________/ \ repository /  \ tag /
+# ------------------------------------------------------------------------------
+imageRegistry: ghcr.io/majosanchez07/practicas-sa-b-202100265
+
+# ------------------------------------------------------------------------------
+# Namespace
+#
+# Lo crea Terraform (P8/terraform/platform/), no el chart ni ArgoCD. Por eso
+# create queda en false: si dos componentes declararan el mismo namespace, se
+# lo disputarian y la aplicacion nunca alcanzaria el estado Synced.
+# ------------------------------------------------------------------------------
+namespace:
+  create: false
+  name: sa-p8
+
+# ------------------------------------------------------------------------------
+# Cuotas y limites: los gestiona Terraform
+#
+# Apagados a proposito. Ver la explicacion completa en
+# P8/terraform/platform/main.tf: si Terraform y ArgoCD declararan ambos el
+# mismo ResourceQuota, la aplicacion oscilaria entre Synced y OutOfSync sin
+# estabilizarse nunca, y el requisito de calificacion exige que este Synced.
+# ------------------------------------------------------------------------------
+resourceQuota:
+  enabled: false
+
+limitRange:
+  enabled: false
+
+# ------------------------------------------------------------------------------
+# Configuracion de la aplicacion
+# ------------------------------------------------------------------------------
+config:
+  logLevel: warn
+  environment: production
+  corsOrigins: "*"
+
+# ------------------------------------------------------------------------------
+# Credenciales para descargar las imagenes
+#
+# Las imagenes publicadas en GHCR desde un repositorio privado nacen privadas.
+# El secreto ghcr-credenciales lo crea el estudiante una sola vez; no vive en
+# este repositorio.
+# ------------------------------------------------------------------------------
+imagePullSecrets:
+  - name: ghcr-credenciales
+
+# ------------------------------------------------------------------------------
+# Servicios
+#
+# El dimensionamiento se hereda de la Practica 5, que ya se comprobo adecuado.
+# Lo unico especifico de la Practica 8 es el bloque progressive del api-gateway.
+# ------------------------------------------------------------------------------
+services:
+  api-gateway:
+    replicaCount: 3
+    image:
+      repository: p8-api-gateway
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+    pdb:
+      enabled: true
+      minAvailable: 2
+
+    # --------------------------------------------------------------------------
+    # Entrega progresiva — solo el api-gateway
+    #
+    # Es la unica puerta de entrada del sistema: una version defectuosa aqui
+    # afecta al 100% de los usuarios. Es el componente que mas justifica el
+    # mecanismo, y aplicarlo a los siete multiplicaria el tiempo de despliegue
+    # sin aportar nada.
+    # --------------------------------------------------------------------------
+    progressive:
+      enabled: true
+
+      # Cuatro pasos; el enunciado exige al menos tres. Cada pausa da tiempo al
+      # AnalysisTemplate a ejecutar sus pruebas contra la version candidata.
+      steps:
+        - setWeight: 20
+        - pause: { duration: 60s }
+        - setWeight: 50
+        - pause: { duration: 60s }
+        - setWeight: 80
+        - pause: { duration: 60s }
+
+      # Endpoints que la prueba de integracion verifica en cada paso.
+      criticalPaths:
+        - /health/live
+        - /health/ready
+        - /api/books
+
+      loadPath: /health/ready
+
+  auth-service:
+    replicaCount: 2
+    image:
+      repository: p8-auth-service
+    resources:
+      requests: { cpu: 100m, memory: 192Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+
+  books-service:
+    replicaCount: 2
+    image:
+      repository: p8-books-service
+    resources:
+      requests: { cpu: 100m, memory: 192Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+
+  loans-service:
+    replicaCount: 2
+    image:
+      repository: p8-loans-service
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+
+  notifications-service:
+    replicaCount: 2
+    image:
+      repository: p8-notifications-service
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    autoscaling:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 3
+
+# ------------------------------------------------------------------------------
+# Dependencias
+# ------------------------------------------------------------------------------
+postgresql:
+  enabled: true
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+      storageClass: gp3
+
+rabbitmq:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: gp3
+
+# ==============================================================================
+# SECRETOS
+#
+# Este archivo NO contiene ninguna credencial, y no debe contenerla nunca: el
+# enunciado prohibe expresamente cualquier secreto en texto plano en el
+# repositorio de manifiestos.
+#
+# Las credenciales viajan como SealedSecret (platform/sealed-secrets/), cifradas
+# con la clave publica del controlador instalado en el cluster. Un SealedSecret
+# cifrado solo puede descifrarlo ese controlador: publicarlo en un repositorio
+# publico es seguro.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Cronjobs
+# ------------------------------------------------------------------------------
+cronjobs:
+  insert:
+    enabled: true
+    image:
+      repository: p8-cronjob-insert
+  summary:
+    enabled: true
+    image:
+      repository: p8-cronjob-summary

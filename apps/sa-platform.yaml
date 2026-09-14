@@ -1,0 +1,129 @@
+# ==============================================================================
+# Application de ArgoCD — la plataforma de microservicios
+#
+# Practica 8 — Maria Jose Tebalan Sanchez — 202100265
+#
+# Una Application le dice a ArgoCD tres cosas: de donde sacar los manifiestos
+# (source), donde aplicarlos (destination) y con que grado de automatismo
+# (syncPolicy).
+#
+# La particularidad de esta configuracion
+# ---------------------------------------
+# El chart NO vive en este repositorio, sino en el de codigo. Eso puede parecer
+# contradictorio con la separacion de repositorios, pero no lo es: lo que la
+# practica exige separar son los MANIFIESTOS del CODIGO FUENTE, y un chart de
+# Helm es una plantilla de manifiestos.
+#
+# Lo que este repositorio aporta es el valor que decide QUE version se despliega
+# -el archivo environments/prod/values.yaml-, que es exactamente la unica linea
+# que el pipeline puede modificar. El chart define la forma; este repositorio,
+# el contenido.
+#
+# ArgoCD combina ambos con la funcion "multiples fuentes" (multi-source): toma
+# el chart de un repositorio y los values de otro.
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sa-platform
+  namespace: argocd
+  labels:
+    practica: p8
+    carne: "202100265"
+  # finalizer: al borrar esta Application, ArgoCD borra tambien los recursos
+  # que creo en el cluster. Sin el, quedarian huerfanos.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # ---------------------------------------------------------------------------
+  # De donde salen los manifiestos
+  # ---------------------------------------------------------------------------
+  sources:
+    # El chart, desde el repositorio de codigo.
+    - repoURL: https://github.com/majosanchez07/Practicas-SA-B-202100265.git
+      targetRevision: main
+      path: P8/charts/sa-platform
+      helm:
+        releaseName: sa-platform
+        # Los values se leen del OTRO source, el de este repositorio. La
+        # sintaxis $valores hace referencia al "ref" declarado mas abajo.
+        valueFiles:
+          - $valores/environments/prod/values.yaml
+
+    # Este repositorio, del que salen los valores de configuracion. No declara
+    # "path" porque no aporta manifiestos propios: solo sirve de referencia
+    # para los valueFiles de arriba.
+    - repoURL: https://github.com/majosanchez07/Practicas-SA-B-202100265-gitops.git
+      targetRevision: main
+      ref: valores
+
+  # ---------------------------------------------------------------------------
+  # Donde se aplican
+  # ---------------------------------------------------------------------------
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sa-p8
+
+  # ---------------------------------------------------------------------------
+  # Politica de sincronizacion
+  # ---------------------------------------------------------------------------
+  syncPolicy:
+    automated:
+      # prune: borra del cluster lo que se elimine del repositorio. Sin esto,
+      # un recurso retirado del manifiesto seguiria vivo indefinidamente y el
+      # cluster dejaria de reflejar el repositorio.
+      prune: true
+      # selfHeal: revierte cualquier cambio hecho a mano sobre el cluster. Es
+      # lo que resuelve la tercera debilidad que el enunciado senala: "el
+      # estado real del cluster puede diferir del declarado y nadie lo
+      # detecta". Con selfHeal, ademas de detectarse, se corrige solo.
+      selfHeal: true
+      allowEmpty: false
+
+    syncOptions:
+      # El namespace lo crea Terraform, no ArgoCD: por eso NO se activa
+      # CreateNamespace. Si ambos lo declararan, se disputarian el objeto.
+      - CreateNamespace=false
+      # Aplica los recursos en orden de dependencia (CRDs antes que las
+      # instancias que los usan).
+      - ApplyOutOfSyncOnly=true
+      - PruneLast=true
+
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+
+  # ---------------------------------------------------------------------------
+  # Diferencias que ArgoCD debe ignorar
+  #
+  # Sin estas excepciones, la aplicacion nunca alcanzaria el estado Synced, que
+  # es requisito de calificacion. Cada una corresponde a un campo que OTRO
+  # controlador modifica legitimamente despues de que ArgoCD aplica el
+  # manifiesto.
+  # ---------------------------------------------------------------------------
+  ignoreDifferences:
+    # El HPA decide el numero de replicas. Si ArgoCD lo reconciliara contra el
+    # valor del chart, el autoescalado y ArgoCD se pelearian indefinidamente.
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+
+    # Lo mismo para el Rollout.
+    - group: argoproj.io
+      kind: Rollout
+      jsonPointers:
+        - /spec/replicas
+
+    # Argo Rollouts reescribe el selector de los Services canary y stable para
+    # dirigir el trafico: les agrega la etiqueta rollouts-pod-template-hash.
+    # Ese cambio es el mecanismo mismo del canary, no una desviacion.
+    - group: ""
+      kind: Service
+      jsonPointers:
+        - /spec/selector

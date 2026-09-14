@@ -1,0 +1,162 @@
+# ==============================================================================
+# Ambiente: DESARROLLO
+#
+# Practica 8 — Maria Jose Tebalan Sanchez — 202100265
+#
+# El enunciado exige "archivos de valores diferenciados por ambiente". Las
+# diferencias con produccion no son arbitrarias; cada una responde a que en
+# desarrollo se prioriza la rapidez de iteracion y el bajo consumo, mientras
+# que en produccion se prioriza la disponibilidad.
+#
+#   | Aspecto            | dev                  | prod                     |
+#   |--------------------|----------------------|--------------------------|
+#   | Replicas           | 1 por servicio       | 2-3 con autoescalado     |
+#   | Nivel de log       | debug                | warn                     |
+#   | Canary             | 2 pasos, pausas 30s  | 3 pasos, pausas 60s      |
+#   | Umbrales           | mas laxos            | estrictos                |
+#   | Persistencia       | efimera              | volumenes gp3            |
+#   | PodDisruptionBudget| desactivado          | activo                   |
+#
+# El canary mas corto en dev es deliberado: en desarrollo interesa ver que el
+# mecanismo funciona, no esperar cinco minutos por cada despliegue de prueba.
+# ==============================================================================
+
+global:
+  imageTag: "1.0.0"
+
+imageRegistry: ghcr.io/majosanchez07/practicas-sa-b-202100265
+
+namespace:
+  create: false
+  name: sa-p8-dev
+
+# Igual que en produccion: los gestiona Terraform.
+resourceQuota:
+  enabled: false
+
+limitRange:
+  enabled: false
+
+config:
+  # En desarrollo interesa ver todo lo que ocurre.
+  logLevel: debug
+  environment: development
+  corsOrigins: "*"
+
+imagePullSecrets:
+  - name: ghcr-credenciales
+
+services:
+  api-gateway:
+    replicaCount: 1
+    image:
+      repository: p8-api-gateway
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 300m, memory: 256Mi }
+    autoscaling:
+      enabled: false
+    pdb:
+      enabled: false
+
+    progressive:
+      enabled: true
+
+      # Canary abreviado: dos pasos con pausas de 30 s en lugar de tres con
+      # pausas de 60 s. Suficiente para comprobar que el mecanismo funciona sin
+      # alargar cada iteracion de desarrollo.
+      steps:
+        - setWeight: 50
+        - pause: { duration: 30s }
+        - setWeight: 100
+        - pause: { duration: 30s }
+
+      criticalPaths:
+        - /health/live
+        - /health/ready
+
+      loadPath: /health/ready
+
+      # Umbrales mas laxos que en produccion: en un ambiente de un solo nodo,
+      # con recursos reducidos y sin calentamiento previo, la latencia es
+      # naturalmente mayor. Mantener el umbral de produccion aqui provocaria
+      # reversiones por causas ambientales y no por defectos del codigo, lo que
+      # ensenaria a desconfiar del mecanismo.
+      thresholds:
+        intervalo: 15s
+        intervaloCarga: 45s
+        vus: 2
+        duracion: 20s
+        tasaErrorMaxima: 0.05
+        latenciaP95Ms: 1500
+
+  auth-service:
+    replicaCount: 1
+    image:
+      repository: p8-auth-service
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 300m, memory: 320Mi }
+    autoscaling:
+      enabled: false
+    pdb:
+      enabled: false
+
+  books-service:
+    replicaCount: 1
+    image:
+      repository: p8-books-service
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 300m, memory: 320Mi }
+    autoscaling:
+      enabled: false
+    pdb:
+      enabled: false
+
+  loans-service:
+    replicaCount: 1
+    image:
+      repository: p8-loans-service
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 300m, memory: 256Mi }
+    autoscaling:
+      enabled: false
+    pdb:
+      enabled: false
+
+  notifications-service:
+    replicaCount: 1
+    image:
+      repository: p8-notifications-service
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 300m, memory: 256Mi }
+    autoscaling:
+      enabled: false
+    pdb:
+      enabled: false
+
+cronjobs:
+  insert:
+    enabled: true
+    image:
+      repository: p8-cronjob-insert
+  summary:
+    enabled: true
+    image:
+      repository: p8-cronjob-summary
+
+# En desarrollo la persistencia es efimera: los datos se pierden al reiniciar,
+# que es justo lo que se quiere de un ambiente desechable.
+postgresql:
+  enabled: true
+  primary:
+    persistence:
+      enabled: false
+
+rabbitmq:
+  enabled: true
+  persistence:
+    enabled: false
