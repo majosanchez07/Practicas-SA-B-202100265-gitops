@@ -1,0 +1,188 @@
+# ==============================================================================
+# Normas de admision — declaradas en el repositorio
+#
+# Practica 8 — Maria Jose Tebalan Sanchez — 202100265
+#
+# Estas normas son las mismas que viven en el repositorio de codigo
+# (P8/policies/). Se declaran tambien aqui por una razon de principio: el
+# repositorio de declaracion debe describir TODO lo que existe en el entorno,
+# incluidas las normas que lo gobiernan.
+#
+# Si las normas se aplicaran a mano, tendriamos un entorno cuyo comportamiento
+# no esta descrito en ninguna parte: alguien podria retirarlas sin que quedara
+# registro, y el sistema aceptaria despliegues que antes rechazaba.
+#
+# Las tres normas
+# ---------------
+#   1. Toda referencia a un artefacto debe indicar una version explicita.
+#   2. Todo contenedor debe declarar cuanto consume y cuanto puede consumir.
+#   3. Ningun contenedor se ejecuta con privilegios de administrador.
+#
+# Todas en modo de rechazo, no de aviso: una norma que no puede detener un
+# despliegue no es una norma, es documentacion.
+# ==============================================================================
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: prohibir-etiqueta-latest
+  annotations:
+    policies.kyverno.io/title: Prohibir referencias imprecisas a artefactos
+    policies.kyverno.io/category: Trazabilidad
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Una referencia movil impide saber que se esta ejecutando y hace imposible
+      una reversion fiable: la version anterior puede apuntar ahora a otro
+      contenido.
+  labels:
+    practica: p8
+    carne: "202100265"
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: sin-etiqueta-latest
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [sa-p8]
+      validate:
+        message: >-
+          La referencia al artefacto usa una etiqueta movil. Debe indicar una
+          version explicita derivada de una version publicada.
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"
+
+    - name: etiqueta-obligatoria
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [sa-p8]
+      validate:
+        message: >-
+          La referencia no declara ninguna version, lo que equivale a usar una
+          etiqueta movil.
+        pattern:
+          spec:
+            containers:
+              - image: "*:*"
+
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: exigir-limites-de-recursos
+  annotations:
+    policies.kyverno.io/title: Exigir declaracion de consumo
+    policies.kyverno.io/category: Estabilidad
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Un contenedor sin techo de memoria puede agotar la del nodo. Cuando eso
+      ocurre, el sistema operativo termina el proceso que mas memoria ocupe, que
+      no es necesariamente el causante.
+  labels:
+    practica: p8
+    carne: "202100265"
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: requests-y-limits-obligatorios
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [sa-p8]
+      validate:
+        message: >-
+          Todo contenedor debe declarar cuanto consume (requests) y cuanto puede
+          llegar a consumir (limits), en procesador y memoria.
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: exigir-ejecucion-sin-root
+  annotations:
+    policies.kyverno.io/title: Exigir ejecucion sin privilegios
+    policies.kyverno.io/category: Seguridad
+    policies.kyverno.io/severity: critical
+    policies.kyverno.io/description: >-
+      Un contenedor comparte el nucleo del sistema con el nodo que lo aloja. El
+      administrador de dentro del contenedor es el mismo del host: ante un fallo
+      de aislamiento, esta norma es la diferencia entre comprometer un
+      contenedor y comprometer el nodo completo.
+  labels:
+    practica: p8
+    carne: "202100265"
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: ejecutar-como-no-root
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [sa-p8]
+      validate:
+        message: >-
+          Los contenedores deben ejecutarse con un usuario sin privilegios de
+          administrador.
+        anyPattern:
+          - spec:
+              securityContext:
+                runAsNonRoot: true
+          - spec:
+              containers:
+                - securityContext:
+                    runAsNonRoot: true
+
+    - name: sin-escalada-de-privilegios
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [sa-p8]
+      validate:
+        message: >-
+          Todo contenedor debe impedir la escalada de privilegios. Sin esto, un
+          proceso sin privilegios puede obtenerlos mediante un binario del
+          sistema.
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  allowPrivilegeEscalation: false
+
+    - name: eliminar-capacidades
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [sa-p8]
+      validate:
+        message: >-
+          Todo contenedor debe renunciar a las capacidades del sistema. Ninguno
+          de estos componentes necesita ninguna.
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  capabilities:
+                    drop:
+                      - ALL
