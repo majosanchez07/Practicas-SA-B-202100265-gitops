@@ -199,6 +199,19 @@ services:
 # ------------------------------------------------------------------------------
 postgresql:
   enabled: true
+  # El subchart necesita saber que usuario y base crear al inicializarse. Sin
+  # estos valores arranca solo con el superusuario y los servicios no pueden
+  # autenticarse: la base existe pero el usuario de la aplicacion no.
+  #
+  # La contrasena NO se escribe aqui: se toma del objeto cifrado que el
+  # controlador de secretos descifra dentro del cluster.
+  auth:
+    username: biblioteca
+    database: biblioteca
+    existingSecret: sa-platform-secret
+    secretKeys:
+      userPasswordKey: POSTGRES_PASSWORD
+      adminPasswordKey: POSTGRES_PASSWORD
   primary:
     persistence:
       enabled: true
@@ -207,6 +220,10 @@ postgresql:
 
 rabbitmq:
   enabled: true
+  auth:
+    username: biblioteca
+    existingPasswordSecret: sa-platform-secret
+    existingSecretPasswordKey: RABBITMQ_PASSWORD
   persistence:
     enabled: true
     size: 8Gi
