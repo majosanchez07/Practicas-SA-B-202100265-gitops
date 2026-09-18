@@ -71,7 +71,11 @@ limitRange:
 # Configuracion de la aplicacion
 # ------------------------------------------------------------------------------
 config:
-  logLevel: warn
+  # "warning", no "warn": el servidor de aplicaciones de los servicios en
+  # Python rechaza el valor abreviado y el contenedor no llega a arrancar.
+  # El gateway acepta ambos, de modo que el error solo se manifiesta en cuatro
+  # de los siete componentes.
+  logLevel: warning
   environment: production
   corsOrigins: "*"
 
