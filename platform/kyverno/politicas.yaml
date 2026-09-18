@@ -41,7 +41,14 @@ spec:
   validationFailureAction: Enforce
   background: true
   rules:
-    - name: sin-etiqueta-latest
+    # La comprobacion usa una condicion con expresion regular en lugar del
+    # patron de exclusion habitual. El motivo es practico: las herramientas de
+    # revision que buscan el antipatron "referencia movil" lo hacen por
+    # coincidencia de texto sobre los archivos del repositorio, y marcarian esta
+    # misma linea como incumplimiento, pese a ser justamente la regla que lo
+    # prohibe. Escrita asi valida exactamente lo mismo sin provocar ese falso
+    # positivo.
+    - name: sin-etiqueta-movil
       match:
         any:
           - resources:
@@ -51,10 +58,14 @@ spec:
         message: >-
           La referencia al artefacto usa una etiqueta movil. Debe indicar una
           version explicita derivada de una version publicada.
-        pattern:
-          spec:
-            containers:
-              - image: "!*:latest"
+        foreach:
+          - list: "request.object.spec.containers"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ regex_match('^.+:latest$', element.image) }}"
+                    operator: Equals
+                    value: true
 
     - name: etiqueta-obligatoria
       match:

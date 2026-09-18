@@ -40,24 +40,31 @@ spec:
   # ---------------------------------------------------------------------------
   # De donde salen los manifiestos
   # ---------------------------------------------------------------------------
+  # El orden importa y no es casual: este repositorio va PRIMERO.
+  #
+  # Las herramientas de inspeccion -y quien revise la aplicacion- leen la
+  # primera fuente para saber de donde toma el estado declarado. Poniendo aqui
+  # el repositorio de declaracion queda explicito que es el la fuente de verdad,
+  # y que el otro solo aporta la plantilla de empaquetado.
   sources:
-    # El chart, desde el repositorio de codigo.
+    # Este repositorio: la fuente de verdad. Aporta los valores que deciden QUE
+    # version se despliega y con que configuracion. No declara "path" porque no
+    # contiene manifiestos propios; sirve de referencia para los valueFiles.
+    - repoURL: https://github.com/majosanchez07/Practicas-SA-B-202100265-gitops.git
+      targetRevision: main
+      ref: valores
+
+    # El repositorio de codigo: aporta unicamente la plantilla de empaquetado.
+    # Un chart es una plantilla de manifiestos, no codigo fuente de la
+    # aplicacion, y por eso vive junto al codigo que empaqueta.
     - repoURL: https://github.com/majosanchez07/Practicas-SA-B-202100265.git
       targetRevision: main
       path: P8/charts/sa-platform
       helm:
         releaseName: sa-platform
-        # Los values se leen del OTRO source, el de este repositorio. La
-        # sintaxis $valores hace referencia al "ref" declarado mas abajo.
+        # La sintaxis $valores hace referencia al "ref" declarado arriba.
         valueFiles:
           - $valores/environments/prod/values.yaml
-
-    # Este repositorio, del que salen los valores de configuracion. No declara
-    # "path" porque no aporta manifiestos propios: solo sirve de referencia
-    # para los valueFiles de arriba.
-    - repoURL: https://github.com/majosanchez07/Practicas-SA-B-202100265-gitops.git
-      targetRevision: main
-      ref: valores
 
   # ---------------------------------------------------------------------------
   # Donde se aplican
