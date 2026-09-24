@@ -1,0 +1,34 @@
+# ==============================================================================
+# Schedule de Velero - respaldos programados
+#
+# Practica 9 - Maria Jose Tebalan Sanchez - 202100265
+#
+# Calendario : cada 30 minutos (cron "*/30 * * * *")  -> RPO declarado 30 min
+# Retencion  : 7 dias (ttl 168h). Velero borra los respaldos vencidos solo.
+# Alcance    : namespace sa-p8 completo (objetos + volumenes persistentes)
+# Destino    : objetos -> S3 sa-p9-velero-202100265 (us-east-2)
+#              volumenes -> snapshots EBS de la cuenta
+#              Ambos fuera del cluster: sobreviven a su destruccion.
+#
+# Consistencia: un snapshot de un volumen en uso puede capturar la base a
+# medias. Por eso el pod de PostgreSQL lleva un hook previo (anotaciones en
+# environments/prod/values.yaml) que ejecuta pg_dump dentro del mismo volumen
+# antes del snapshot: "mejor un dump que un snapshot".
+# ==============================================================================
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: respaldo-sa-p9
+  namespace: velero
+spec:
+  schedule: "*/30 * * * *"
+  useOwnerReferencesInBackup: false
+  template:
+    includedNamespaces:
+      - sa-p8
+    snapshotVolumes: true
+    defaultVolumesToFsBackup: false
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+    ttl: 168h0m0s

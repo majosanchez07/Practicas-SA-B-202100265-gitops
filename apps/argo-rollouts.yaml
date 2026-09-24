@@ -1,0 +1,34 @@
+# ==============================================================================
+# Argo Rollouts - controlador de entrega progresiva (Practica 8)
+#
+# Practica 9 - Maria Jose Tebalan Sanchez - 202100265
+#
+# En la P8 se instalaba con "helm install" a mano. Ahora es una hija de la
+# aplicacion raiz: tras un desastre se reinstala sola. Ola 0 porque el Rollout
+# de sa-platform necesita sus CRDs.
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-rollouts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-rollouts
+    targetRevision: 2.38.0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-rollouts
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

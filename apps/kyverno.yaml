@@ -1,0 +1,35 @@
+# ==============================================================================
+# Kyverno - motor de admision (Practica 8)
+#
+# Practica 9 - Maria Jose Tebalan Sanchez - 202100265
+#
+# Ola 0. ServerSideApply es obligatorio: los CRDs de Kyverno superan el limite
+# de 256 KB de la anotacion last-applied-configuration del apply clasico.
+# El namespace kyverno lo crea Terraform (platform/main.tf).
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://kyverno.github.io/kyverno
+    chart: kyverno
+    targetRevision: 3.3.4
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=false
+    retry:
+      limit: 10
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

@@ -32,6 +32,12 @@ metadata:
     carne: "202100265"
   # finalizer: al borrar esta Application, ArgoCD borra tambien los recursos
   # que creo en el cluster. Sin el, quedarian huerfanos.
+  # Practica 9: hija de la aplicacion raiz raiz-sa-p9. Ola 3: se sincroniza
+  # despues de los controladores (ola 0) y de secretos, politicas y respaldos
+  # (ola 1), de modo que cuando se crean los pods ya existen el Secret
+  # descifrado y las politicas de admision.
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
@@ -59,7 +65,7 @@ spec:
     # aplicacion, y por eso vive junto al codigo que empaqueta.
     - repoURL: https://github.com/majosanchez07/Practicas-SA-B-202100265.git
       targetRevision: main
-      path: P8/charts/sa-platform
+      path: P9/charts/sa-platform
       helm:
         releaseName: sa-platform
         # La sintaxis $valores hace referencia al "ref" declarado arriba.

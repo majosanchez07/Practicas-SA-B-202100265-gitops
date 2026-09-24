@@ -1,0 +1,28 @@
+# ==============================================================================
+# Schedule de Velero: calendario y retencion de los respaldos, declarados en Git.
+#
+# Practica 9 - Maria Jose Tebalan Sanchez - 202100265
+# Hija de la aplicacion raiz raiz-sa-p9 (app-of-apps).
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: respaldos-velero
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/majosanchez07/Practicas-SA-B-202100265-gitops.git
+    targetRevision: main
+    path: platform/velero
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 10
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

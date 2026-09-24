@@ -147,6 +147,10 @@ services:
 
   auth-service:
     replicaCount: 2
+    # Practica 9: resiliencia ante perdida de nodo.
+    pdb:
+      enabled: true
+      minAvailable: 1
     image:
       repository: p8-auth-service
     resources:
@@ -160,6 +164,10 @@ services:
 
   books-service:
     replicaCount: 2
+    # Practica 9: resiliencia ante perdida de nodo.
+    pdb:
+      enabled: true
+      minAvailable: 1
     image:
       repository: p8-books-service
     resources:
@@ -172,6 +180,10 @@ services:
 
   loans-service:
     replicaCount: 2
+    # Practica 9: resiliencia ante perdida de nodo.
+    pdb:
+      enabled: true
+      minAvailable: 1
     image:
       repository: p8-loans-service
     resources:
@@ -217,6 +229,17 @@ postgresql:
       enabled: true
       size: 8Gi
       storageClass: gp3
+    # Practica 9 - respaldo consistente. Antes de cada snapshot, Velero ejecuta
+    # pg_dump dentro del contenedor y deja el volcado en el mismo volumen que
+    # se respalda. Si el snapshot capturara los archivos de datos a medio
+    # escribir, el volcado sigue siendo una copia coherente de la base.
+    # on-error: Fail -> si el volcado falla, el respaldo se marca fallido en
+    # lugar de reportarse exitoso siendo inservible.
+    podAnnotations:
+      pre.hook.backup.velero.io/container: postgresql
+      pre.hook.backup.velero.io/on-error: Fail
+      pre.hook.backup.velero.io/timeout: 120s
+      pre.hook.backup.velero.io/command: '["/bin/bash","-c","mkdir -p /bitnami/postgresql/respaldo && PGPASSWORD=\"$POSTGRES_PASSWORD\" pg_dump -h 127.0.0.1 -U biblioteca -d biblioteca -f /bitnami/postgresql/respaldo/biblioteca.sql && date -u +%FT%TZ > /bitnami/postgresql/respaldo/marca.txt"]'
 
 rabbitmq:
   enabled: true
