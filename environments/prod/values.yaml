@@ -277,3 +277,13 @@ cronjobs:
     enabled: true
     image:
       repository: p8-cronjob-summary
+
+# ------------------------------------------------------------------------------
+# Ingress (Practica 9)
+#
+# AKS no trae un controlador nginx: sin el, el Ingress nunca recibe direccion,
+# queda en Progressing y sa-platform no llega a Healthy. La entrada al sistema
+# es el Service del api-gateway; el Ingress se desactiva.
+# ------------------------------------------------------------------------------
+ingress:
+  enabled: false
