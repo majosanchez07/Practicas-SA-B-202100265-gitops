@@ -26,7 +26,10 @@ spec:
       # Practica 9 - capacidad N+1: los cuatro controladores piden 100m cada
       # uno por defecto (400m) y consumen ~1m en reposo. Con 25m caben en un
       # solo nodo cuando el otro se drena.
-      valuesObject:
+      # Se usa "values" (texto) y no "valuesObject": dentro del app-of-apps,
+      # ArgoCD normaliza valuesObject distinto de como esta en Git y la
+      # aplicacion raiz queda OutOfSync de forma permanente.
+      values: |
         admissionController:
           container:
             resources:
