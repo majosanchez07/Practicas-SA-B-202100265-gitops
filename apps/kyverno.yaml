@@ -22,6 +22,24 @@ spec:
     repoURL: https://kyverno.github.io/kyverno
     chart: kyverno
     targetRevision: 3.3.4
+    helm:
+      # Practica 9 - capacidad N+1: los cuatro controladores piden 100m cada
+      # uno por defecto (400m) y consumen ~1m en reposo. Con 25m caben en un
+      # solo nodo cuando el otro se drena.
+      valuesObject:
+        admissionController:
+          container:
+            resources:
+              requests: { cpu: 25m, memory: 128Mi }
+        backgroundController:
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+        cleanupController:
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+        reportsController:
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
   destination:
     server: https://kubernetes.default.svc
     namespace: kyverno

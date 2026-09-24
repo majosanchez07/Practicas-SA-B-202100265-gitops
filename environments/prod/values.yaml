@@ -95,13 +95,18 @@ imagePullSecrets:
 # El dimensionamiento se hereda de la Practica 5, que ya se comprobo adecuado.
 # Lo unico especifico de la Practica 8 es el bloque progressive del api-gateway.
 # ------------------------------------------------------------------------------
+# Practica 9 - capacidad N+1. Con dos nodos de 1.9 CPU asignables, al drenar
+# uno el otro debe poder alojar TODO. Los requests de 100m por servicio (P8)
+# sumaban mas de lo que cabe en un nodo y la prueba de perdida de nodo dejo
+# pods en Pending. El consumo medido en reposo es de 3-4m por servicio
+# (kubectl top), de modo que 25m conserva margen y los limits no cambian.
 services:
   api-gateway:
     replicaCount: 3
     image:
       repository: p8-api-gateway
     resources:
-      requests: { cpu: 100m, memory: 128Mi }
+      requests: { cpu: 25m, memory: 128Mi }
       limits: { cpu: 500m, memory: 512Mi }
     autoscaling:
       enabled: true
@@ -154,7 +159,7 @@ services:
     image:
       repository: p8-auth-service
     resources:
-      requests: { cpu: 100m, memory: 192Mi }
+      requests: { cpu: 25m, memory: 192Mi }
       limits: { cpu: 500m, memory: 512Mi }
     autoscaling:
       enabled: true
@@ -171,7 +176,7 @@ services:
     image:
       repository: p8-books-service
     resources:
-      requests: { cpu: 100m, memory: 192Mi }
+      requests: { cpu: 25m, memory: 192Mi }
       limits: { cpu: 500m, memory: 512Mi }
     autoscaling:
       enabled: true
@@ -187,7 +192,7 @@ services:
     image:
       repository: p8-loans-service
     resources:
-      requests: { cpu: 100m, memory: 128Mi }
+      requests: { cpu: 25m, memory: 128Mi }
       limits: { cpu: 500m, memory: 512Mi }
     autoscaling:
       enabled: true
@@ -199,7 +204,7 @@ services:
     image:
       repository: p8-notifications-service
     resources:
-      requests: { cpu: 100m, memory: 128Mi }
+      requests: { cpu: 25m, memory: 128Mi }
       limits: { cpu: 500m, memory: 512Mi }
     autoscaling:
       enabled: true
@@ -235,6 +240,9 @@ postgresql:
     # escribir, el volcado sigue siendo una copia coherente de la base.
     # on-error: Fail -> si el volcado falla, el respaldo se marca fallido en
     # lugar de reportarse exitoso siendo inservible.
+    resources:
+      requests: { cpu: 50m, memory: 256Mi }
+      limits: { cpu: 1, memory: 1Gi }
     podAnnotations:
       pre.hook.backup.velero.io/container: postgresql
       pre.hook.backup.velero.io/on-error: Fail
@@ -251,6 +259,9 @@ rabbitmq:
     enabled: true
     size: 8Gi
     storageClass: managed-csi
+  resources:
+    requests: { cpu: 50m, memory: 256Mi }
+    limits: { cpu: 1, memory: 1Gi }
 
 # ==============================================================================
 # SECRETOS
