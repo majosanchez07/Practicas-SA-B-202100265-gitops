@@ -14,8 +14,13 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+  # El chart de Kyverno trae hooks post-delete; ArgoCD agrega estos dos
+  # finalizers a la Application en vivo. Si no se declaran aqui, la aplicacion
+  # raiz ve la diferencia y queda OutOfSync.
   finalizers:
     - resources-finalizer.argocd.argoproj.io
+    - post-delete-finalizer.argocd.argoproj.io
+    - post-delete-finalizer.argocd.argoproj.io/cleanup
 spec:
   project: default
   source:
