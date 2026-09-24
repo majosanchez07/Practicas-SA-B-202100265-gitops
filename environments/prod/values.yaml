@@ -228,7 +228,7 @@ postgresql:
     persistence:
       enabled: true
       size: 8Gi
-      storageClass: gp3
+      storageClass: managed-csi
     # Practica 9 - respaldo consistente. Antes de cada snapshot, Velero ejecuta
     # pg_dump dentro del contenedor y deja el volcado en el mismo volumen que
     # se respalda. Si el snapshot capturara los archivos de datos a medio
@@ -250,7 +250,7 @@ rabbitmq:
   persistence:
     enabled: true
     size: 8Gi
-    storageClass: gp3
+    storageClass: managed-csi
 
 # ==============================================================================
 # SECRETOS

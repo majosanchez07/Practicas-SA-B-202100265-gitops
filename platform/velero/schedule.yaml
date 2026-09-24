@@ -6,9 +6,9 @@
 # Calendario : cada 30 minutos (cron "*/30 * * * *")  -> RPO declarado 30 min
 # Retencion  : 7 dias (ttl 168h). Velero borra los respaldos vencidos solo.
 # Alcance    : namespace sa-p8 completo (objetos + volumenes persistentes)
-# Destino    : objetos -> S3 sa-p9-velero-202100265 (us-east-2)
-#              volumenes -> snapshots EBS de la cuenta
-#              Ambos fuera del cluster: sobreviven a su destruccion.
+# Destino    : objetos   -> Azure Blob, cuenta sap9velero202100265, contenedor velero
+#              volumenes -> snapshots de disco administrado en rg-sa-p9-base-202100265
+#              Ambos fuera del cluster (centralus): sobreviven a su destruccion.
 #
 # Consistencia: un snapshot de un volumen en uso puede capturar la base a
 # medias. Por eso el pod de PostgreSQL lleva un hook previo (anotaciones en
