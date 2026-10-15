@@ -152,7 +152,7 @@ services:
     # El canary lo detecta por metricas y revierte; despues se vuelve a false.
     # --------------------------------------------------------------------------
     fault:
-      enabled: true
+      enabled: false
       rutas: /loans,/books
       latenciaMs: 900
       tasaError: 0.15
