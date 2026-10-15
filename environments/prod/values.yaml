@@ -132,11 +132,11 @@ services:
       # AnalysisTemplate a ejecutar sus pruebas contra la version candidata.
       steps:
         - setWeight: 20
-        - pause: { duration: 60s }
+        - pause: { duration: 90s }
         - setWeight: 50
-        - pause: { duration: 60s }
+        - pause: { duration: 90s }
         - setWeight: 80
-        - pause: { duration: 60s }
+        - pause: { duration: 90s }
 
       # Practica 10: ya no hay rutas de prueba. El analisis consulta Prometheus
       # por la tasa de error y el p95 de la version candidata (ver
