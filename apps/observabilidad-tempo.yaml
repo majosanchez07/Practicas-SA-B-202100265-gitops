@@ -6,8 +6,7 @@
 # almacen de objetos. Retencion de 72 h: una traza sirve para diagnosticar un
 # incidente reciente; para tendencias estan las metricas.
 #
-# metricsGenerator genera, a partir de las trazas, el grafo de servicios que
-# Grafana dibuja (quien llama a quien y con que tasa de error).
+# metricsGenerator (grafo de servicios) quedo desactivado: ver los valores.
 # ==============================================================================
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -32,14 +31,19 @@ spec:
           retention: 72h
           resources:
             requests: { cpu: 25m, memory: 128Mi }
-            limits: { cpu: 500m, memory: 1Gi }
+            # 1Gi fue insuficiente: con muestreo al 100% Tempo se reinicio 14
+            # veces por OOMKilled durante la prueba del 15/10 y el recorrido
+            # sintoma -> causa no pudo consultar trazas.
+            limits: { cpu: 500m, memory: 2Gi }
           receivers:
             otlp:
               protocols:
                 grpc: { endpoint: "0.0.0.0:4317" }
                 http: { endpoint: "0.0.0.0:4318" }
+          # Desactivado tras los OOMKilled: el grafo de servicios es util pero
+          # no imprescindible, y el generador duplica el trabajo por span.
           metricsGenerator:
-            enabled: true
+            enabled: false
             remoteWriteUrl: http://monitoreo-prometheus.observabilidad.svc.cluster.local:9090/api/v1/write
         persistence:
           enabled: true
