@@ -1,0 +1,31 @@
+# ==============================================================================
+# ServiceMonitor del OpenTelemetry Collector — Practica 10
+#
+# Los servicios no exponen /metrics: empujan sus metricas por OTLP al
+# Collector, y el Collector las expone en el puerto 8889 en formato
+# Prometheus. Este es el unico objetivo que Prometheus recolecta para las
+# metricas de la aplicacion.
+#
+# honorLabels: true conserva las etiquetas que pone el Collector (job,
+# instance, service_name, rollout_hash...). Sin el, Prometheus reemplazaria
+# job e instance por los del propio Collector y todas las series parecerian
+# venir de un solo origen.
+# ==============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: otel-collector-metricas-aplicacion
+  namespace: observabilidad
+  labels:
+    release: monitoreo
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opentelemetry-collector
+      app.kubernetes.io/instance: otel-collector
+  namespaceSelector:
+    matchNames: [observabilidad]
+  endpoints:
+    - port: metricas-app
+      interval: 15s
+      honorLabels: true

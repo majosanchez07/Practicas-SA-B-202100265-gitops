@@ -1,0 +1,32 @@
+# ==============================================================================
+# Configuracion propia del stack de observabilidad (Practica 10)
+#
+# Lo que no viene en ningun chart: la credencial sellada de Grafana y el
+# ServiceMonitor que conecta Prometheus con el Collector. Ola 2: necesita las
+# CRDs de kube-prometheus-stack (ola 1).
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observabilidad-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/majosanchez07/Practicas-SA-B-202100265-gitops.git
+    targetRevision: main
+    path: platform/observabilidad
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observabilidad
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

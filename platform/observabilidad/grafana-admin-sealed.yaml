@@ -1,0 +1,21 @@
+# Credencial de administracion de Grafana (Practica 10).
+# Cifrada con la llave publica de Sealed Secrets de la Practica 9
+# (P9/docs/sealed-secrets-cert.pem): solo el controlador del cluster puede
+# descifrarla, de modo que publicarla en este repositorio es seguro.
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: grafana-admin
+  namespace: observabilidad
+spec:
+  encryptedData:
+    clave: AgB/2Kjw7k5YxIG5gzrx4Daifvy68FgstDJROSP+DfP3vVAHuwe58Ur2lAD+rXZ/7pQySXy3C1e3zfKi618tQp9ZnPPHB0XUwZpGZrc3BX6SEx1usq49yrEGKGzzPdr8RvBpPawVwYjskmcPxz7qtMifNCZBeXogXyy9iTUQkjiGpZKUCPCZPD0Moy5R7xHklr2Jg40zxHK1KmEul5sF6k5P+R9CuQl6dGdPx6FGi2ojZAOkuG28M8HixfZAK4F361U8VT8Ce2bqCSgkZkoLOzblPe34eghTEQA8u+kQYCMwlRuBG1iZdCyFsJm7ZAP0MDjT/CdBh9ShFaHpPrrpZP81K+DGOa1aH/pKpZ5OsZfnijFVt9l8FC/II+Cw6Yz8xZtvokDcVwdAsD4RVFcgv1onx1OUTKCPH5OEO8/Jqsi8Bx+kQMVyROtfWwAt+U/8wU2jCh1yO7nJFb9muD9+G83JIEz/vZkRcjLWjF1KEhCcZ06mjdUNe3wk1C6VGCYWZqn1sAdc7WvdnKmHvXTT7vcADUeUE6bf2IaPvizLx/6kbiMsfXlXIEAdm7vhMkjAt1q3W3FFa9EOm2g64EN66svYpL+OtQWEONheebTdUvwG/TaOLHniM9zeX3wE0gFmnYL3kk5oyTQEE5nJ3N+28jpQ38ZDbUf5ryc6pjUVNPu9IMRkjSOgvgaHxtiH48gMK56B80cqeArWNhT9EdB2IRIhONIefIthrTw=
+    usuario: AgA1H/2wc26cOqACFsbolajuLHktYFbwSTc2fTIR1WV5uMcZzVfQdGkUgbSErmGgl7U3prgM15PlI2v0rRePHvhAyC6U8B8EC5ohp/0+EfuFdDkAbOXuPZ6Fg5EoSrKXWSOulHV8QzET4EGrQe3bZxjp10JAGGLm6ffl964lnB7uZppA26Kv4cqFXnaPaMcPGsYfeD/4pd3dXO5VKWB/fUgK2k1Cv2KZic+oYC7rpdeGRA+YRWeQntU6s39VgTaR7JMK8yKShDI2JkFiB0a/wg7yNi/vsq36jL6qq8lSRVpg9aLbUg7Fjx61DoOyfVHplmkQ9XIbPFqEngWse5CfrysUKoYJiYrM2YkuiAZXadU4Pm6+GVsOcTYM2zNybZI+6g6zYRJF0k2IK/Mzeb84FlQeH9VZsJJVT1JhfcVmXbnSyDA4+EWKWeKa5f65m21D80NwDIEfErVmognmT5cZm0MslU9ne43uwLy7gD0oKOjdEeRvj+Rfx4sIYnR46uSx9QHo8IRMS1bgdAQCB/u0xemXGjW6RhLrmVltTLIUB/I6kw0g/hvnn2Kbc82kJzur7ZNTXHabuYhuOBTd7cd5wivBVXpl+uEdSFiTwgUKZMsOLsR7ffBmhx6TsSYKMNMrRHy8HZq/kIQWfl5I37HaAeCgMKUVpj+FBQdYgTg8uYQIRvVNjP38WhuyaE+SVebYb/5Kas0Jig==
+  template:
+    metadata:
+      creationTimestamp: null
+      name: grafana-admin
+      namespace: observabilidad
+    type: Opaque
