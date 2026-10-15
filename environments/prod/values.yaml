@@ -25,7 +25,7 @@ global:
   # Deriva siempre de un tag de Git (v1.0.0 -> 1.0.0), como exige el enunciado.
   # La etiqueta "latest" esta prohibida y el pipeline falla si aparece.
   # --------------------------------------------------------------------------
-  imageTag: "1.0.0"
+  imageTag: "1.1.0"
 
 # ------------------------------------------------------------------------------
 # Registro de imagenes
@@ -104,7 +104,7 @@ services:
   api-gateway:
     replicaCount: 3
     image:
-      repository: p8-api-gateway
+      repository: p10-api-gateway
     resources:
       requests: { cpu: 25m, memory: 128Mi }
       limits: { cpu: 500m, memory: 512Mi }
@@ -138,17 +138,24 @@ services:
         - setWeight: 80
         - pause: { duration: 60s }
 
-      # Endpoints que la prueba de integracion verifica en cada paso.
-      # Rutas verificadas contra el codigo del gateway (src/index.js):
-      # el gateway monta /books como proxy hacia el servicio de catalogo.
-      # La ruta /api/books NO existe: usarla haria fallar el analisis siempre,
-      # y la reversion se dispararia por un 404 en lugar de por el defecto.
-      criticalPaths:
-        - /health/live
-        - /health/ready
-        - /books/health/live
+      # Practica 10: ya no hay rutas de prueba. El analisis consulta Prometheus
+      # por la tasa de error y el p95 de la version candidata (ver
+      # P10/charts/sa-platform/templates/analysistemplates.yaml).
 
-      loadPath: /health/ready
+    # --------------------------------------------------------------------------
+    # Fallo inducido del CANARY (Practica 10)
+    #
+    # Regresion de latencia con errores intermitentes en /loans y /books, como
+    # la de un reintento sincrono mal configurado. Para demostrar la reversion
+    # se pone enabled: true junto con un cambio de imagen (o solo este bloque:
+    # cambiar el entorno del pod tambien crea una revision nueva del Rollout).
+    # El canary lo detecta por metricas y revierte; despues se vuelve a false.
+    # --------------------------------------------------------------------------
+    fault:
+      enabled: false
+      rutas: /loans,/books
+      latenciaMs: 900
+      tasaError: 0.15
 
   auth-service:
     replicaCount: 2
@@ -157,7 +164,7 @@ services:
       enabled: true
       minAvailable: 1
     image:
-      repository: p8-auth-service
+      repository: p10-auth-service
     resources:
       requests: { cpu: 25m, memory: 192Mi }
       limits: { cpu: 500m, memory: 512Mi }
@@ -169,12 +176,24 @@ services:
 
   books-service:
     replicaCount: 2
+    # --------------------------------------------------------------------------
+    # Fallo inducido del RECORRIDO SINTOMA -> CAUSA (Practica 10)
+    #
+    # books-service es un Deployment, no un Rollout: su fallo llega a todos los
+    # usuarios sin que nada lo contenga. Simula el agotamiento del pool de
+    # conexiones a la base: espera y luego 503 en una fraccion de peticiones.
+    # Es el que debe detectar la alerta por consumo del presupuesto de error.
+    # --------------------------------------------------------------------------
+    fault:
+      enabled: false
+      latenciaMs: 400
+      tasaError: 0.6
     # Practica 9: resiliencia ante perdida de nodo.
     pdb:
       enabled: true
       minAvailable: 1
     image:
-      repository: p8-books-service
+      repository: p10-books-service
     resources:
       requests: { cpu: 25m, memory: 192Mi }
       limits: { cpu: 500m, memory: 512Mi }
@@ -190,7 +209,7 @@ services:
       enabled: true
       minAvailable: 1
     image:
-      repository: p8-loans-service
+      repository: p10-loans-service
     resources:
       requests: { cpu: 25m, memory: 128Mi }
       limits: { cpu: 500m, memory: 512Mi }
@@ -202,7 +221,7 @@ services:
   notifications-service:
     replicaCount: 2
     image:
-      repository: p8-notifications-service
+      repository: p10-notifications-service
     resources:
       requests: { cpu: 25m, memory: 128Mi }
       limits: { cpu: 500m, memory: 512Mi }
@@ -283,11 +302,11 @@ cronjobs:
   insert:
     enabled: true
     image:
-      repository: p8-cronjob-insert
+      repository: p10-cronjob-insert
   summary:
     enabled: true
     image:
-      repository: p8-cronjob-summary
+      repository: p10-cronjob-summary
 
 # ------------------------------------------------------------------------------
 # Ingress (Practica 9)
@@ -298,3 +317,17 @@ cronjobs:
 # ------------------------------------------------------------------------------
 ingress:
   enabled: false
+
+# ------------------------------------------------------------------------------
+# Observabilidad (Practica 10)
+#
+# El stack vive en el namespace observabilidad (apps/observabilidad-*.yaml).
+# Aqui solo se activa lo que pertenece a la aplicacion: el envio de telemetria
+# por OTLP, las reglas de SLO y alertas, el tablero y el generador de trafico
+# que alimenta al analisis del canary.
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+  trafficGenerator:
+    enabled: true
+    vus: 4
