@@ -1,0 +1,198 @@
+# ==============================================================================
+# Prometheus, Alertmanager y Grafana (kube-prometheus-stack) — Practica 10
+#
+# Maria Jose Tebalan Sanchez — 202100265
+#
+# Hija de la aplicacion raiz: se instala por GitOps, no con helm install.
+# Ola 1: sus CRDs (PrometheusRule, ServiceMonitor) deben existir antes de que
+# sa-platform (ola 3) declare sus reglas de SLO.
+#
+# Decisiones:
+#   - defaultRules desactivadas. El chart trae ~150 alertas de umbral
+#     instantaneo (CPU, memoria, reinicios, cuotas...). Ninguna esta atada a
+#     la experiencia del usuario y casi ninguna exige actuar de inmediato: con
+#     ellas Alertmanager se llenaria de ruido que nadie atiende. Las unicas
+#     alertas del sistema son las de consumo del presupuesto de error, que
+#     declara sa-platform.
+#   - Selectores abiertos: Prometheus carga reglas y ServiceMonitors de
+#     cualquier namespace, no solo los que llevan la etiqueta del release.
+#   - Retencion 30 dias: la ventana de los SLO. Con menos retencion, el
+#     indicador de 30 dias se calcularia sobre datos incompletos.
+#   - Componentes del plano de control desactivados: AKS no los expone y su
+#     recoleccion fallaria siempre (objetivos "down" permanentes = ruido).
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observabilidad-monitoreo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 65.1.1
+    helm:
+      releaseName: monitoreo
+      values: |
+        fullnameOverride: monitoreo
+
+        defaultRules:
+          create: false
+
+        kubeControllerManager: { enabled: false }
+        kubeScheduler: { enabled: false }
+        kubeEtcd: { enabled: false }
+        kubeProxy: { enabled: false }
+
+        prometheus:
+          prometheusSpec:
+            retention: 30d
+            retentionSize: 8GB
+            scrapeInterval: 15s
+            evaluationInterval: 30s
+            # Tempo escribe aqui las metricas del grafo de servicios.
+            enableRemoteWriteReceiver: true
+            ruleSelectorNilUsesHelmValues: false
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            resources:
+              requests: { cpu: 50m, memory: 512Mi }
+              limits: { cpu: "1", memory: 1536Mi }
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: managed-csi
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 10Gi
+
+        alertmanager:
+          alertmanagerSpec:
+            resources:
+              requests: { cpu: 10m, memory: 64Mi }
+              limits: { cpu: 200m, memory: 128Mi }
+          # Solo dos niveles, ambos atados a un SLO:
+          #   critical -> guardia: consumo rapido, se atiende de inmediato
+          #   warning  -> guardia-horario-laboral: consumo sostenido, se
+          #               atiende el mismo dia
+          # La agrupacion por slo evita una notificacion por cada evaluacion.
+          config:
+            route:
+              receiver: guardia-horario-laboral
+              group_by: [alertname, slo]
+              group_wait: 30s
+              group_interval: 5m
+              repeat_interval: 4h
+              routes:
+                - matchers: ['severity="critical"']
+                  receiver: guardia
+                  repeat_interval: 1h
+            inhibit_rules:
+              # Si el consumo rapido ya esta disparado, el sostenido del mismo
+              # SLO no agrega informacion: se silencia.
+              - source_matchers: ['severity="critical"']
+                target_matchers: ['severity="warning"']
+                equal: [slo]
+            receivers:
+              - name: guardia
+              - name: guardia-horario-laboral
+
+        grafana:
+          adminPassword: ""
+          admin:
+            existingSecret: grafana-admin
+            userKey: usuario
+            passwordKey: clave
+          resources:
+            requests: { cpu: 25m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 384Mi }
+          sidecar:
+            dashboards:
+              enabled: true
+              label: grafana_dashboard
+              labelValue: "1"
+              searchNamespace: ALL
+              folderAnnotation: grafana_folder
+              provider:
+                foldersFromFilesStructure: true
+            datasources:
+              defaultDatasourceEnabled: true
+              uid: prometheus
+          # Las tres senales enlazadas entre si:
+          #   Loki  -> Tempo  el campo trace_id de un registro abre su traza
+          #   Tempo -> Loki   desde un span se abren los registros con su id
+          #   Tempo -> Prom.  desde un span, las metricas del servicio
+          additionalDataSources:
+            - name: Loki
+              uid: loki
+              type: loki
+              url: http://loki.observabilidad.svc.cluster.local:3100
+              jsonData:
+                derivedFields:
+                  - name: trace_id
+                    datasourceUid: tempo
+                    matcherType: label
+                    matcherRegex: trace_id
+                    url: "$${__value.raw}"
+                    urlDisplayLabel: Abrir traza en Tempo
+                  - name: trace_id_texto
+                    datasourceUid: tempo
+                    matcherRegex: '"trace_id":"(\w+)"'
+                    url: "$${__value.raw}"
+                    urlDisplayLabel: Abrir traza en Tempo
+            - name: Tempo
+              uid: tempo
+              type: tempo
+              url: http://tempo.observabilidad.svc.cluster.local:3100
+              jsonData:
+                tracesToLogsV2:
+                  datasourceUid: loki
+                  spanStartTimeShift: "-5m"
+                  spanEndTimeShift: "5m"
+                  filterByTraceID: false
+                  filterBySpanID: false
+                  customQuery: true
+                  query: '{namespace="sa-p8"} |= "$${__trace.traceId}"'
+                tracesToMetrics:
+                  datasourceUid: prometheus
+                  queries:
+                    - name: Tasa de error del servicio
+                      query: 'sum(rate(sa_http_requests_total{service_name="$${__span.tags["service.name"]}",status_code=~"5.."}[5m]))'
+                serviceMap:
+                  datasourceUid: prometheus
+                nodeGraph:
+                  enabled: true
+                search:
+                  hide: false
+
+        prometheus-node-exporter:
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 64Mi }
+        kube-state-metrics:
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+        prometheusOperator:
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 256Mi }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observabilidad
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      # Las CRDs del operador superan el limite de 256 KB de la anotacion
+      # last-applied-configuration; con server-side apply no se usa.
+      - ServerSideApply=true
+    retry:
+      limit: 10
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
