@@ -124,3 +124,26 @@ git push
 ArgoCD detecta el cambio y devuelve el clúster al estado anterior. Ése es el
 sentido de que este repositorio sea la fuente de verdad: el `git log` de aquí
 es el historial de lo que estuvo desplegado.
+
+## Práctica 10: observabilidad
+
+El stack de observabilidad es una hija más de la aplicación raíz y vive en el
+namespace `observabilidad`. Nada se instala a mano.
+
+| Application | Chart | Función |
+|---|---|---|
+| `observabilidad-monitoreo` | kube-prometheus-stack 65.1.1 | Prometheus (30 días), Alertmanager y Grafana con Loki y Tempo enlazados |
+| `observabilidad-loki` | loki 6.16.0 | Almacén de registros (SingleBinary) |
+| `observabilidad-promtail` | promtail 6.16.6 | Envía los registros JSON de los nodos a Loki |
+| `observabilidad-tempo` | tempo 1.10.3 | Backend de trazas |
+| `observabilidad-collector` | opentelemetry-collector 0.108.0 | Recibe OTLP; trazas a Tempo, métricas a Prometheus |
+| `observabilidad-config` | `platform/observabilidad/` | Credencial sellada de Grafana y ServiceMonitor del Collector |
+
+`sa-platform` usa ahora `P10/charts/sa-platform`, que aporta el AnalysisTemplate
+por métricas, la PrometheusRule de los SLO, el tablero y el generador de
+tráfico (`observability.enabled: true` en `environments/prod/values.yaml`).
+
+Los fallos de las demostraciones se activan aquí, por commit, con los bloques
+`fault` de `api-gateway` (canary) y `books-service` (recorrido síntoma a
+causa). Procedimiento completo en
+[P10/docs/guia-despliegue-y-demostraciones.md](https://github.com/majosanchez07/Practicas-SA-B-202100265/blob/main/P10/docs/guia-despliegue-y-demostraciones.md).
