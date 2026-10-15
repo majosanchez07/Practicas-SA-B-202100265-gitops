@@ -1,0 +1,56 @@
+# ==============================================================================
+# Promtail — recolector de registros (Practica 10)
+#
+# DaemonSet: lee los registros de los contenedores del disco de cada nodo y
+# los envia a Loki con las etiquetas namespace, pod y container.
+#
+# Para los registros JSON de los servicios agrega una sola etiqueta mas:
+# level. Es de cardinalidad minima (info, warn, error) y permite filtrar los
+# errores sin leer todo el flujo. trace_id NO se convierte en etiqueta: cada
+# peticion crearia un flujo nuevo en Loki. Se consulta como campo con | json.
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observabilidad-promtail
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: promtail
+    targetRevision: 6.16.6
+    helm:
+      releaseName: promtail
+      values: |
+        resources:
+          requests: { cpu: 10m, memory: 64Mi }
+          limits: { cpu: 200m, memory: 192Mi }
+        config:
+          clients:
+            - url: http://loki.observabilidad.svc.cluster.local:3100/loki/api/v1/push
+          snippets:
+            pipelineStages:
+              - cri: {}
+              - match:
+                  selector: '{namespace="sa-p8"}'
+                  stages:
+                    - json:
+                        expressions:
+                          level: level
+                    - labels:
+                        level:
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observabilidad
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
