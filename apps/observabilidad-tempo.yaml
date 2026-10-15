@@ -1,0 +1,57 @@
+# ==============================================================================
+# Tempo — backend de trazas (Practica 10)
+#
+# Modo monolitico (un solo pod) con almacenamiento local en disco persistente:
+# el volumen de trazas de este entorno no justifica el modo distribuido ni un
+# almacen de objetos. Retencion de 72 h: una traza sirve para diagnosticar un
+# incidente reciente; para tendencias estan las metricas.
+#
+# metricsGenerator genera, a partir de las trazas, el grafo de servicios que
+# Grafana dibuja (quien llama a quien y con que tasa de error).
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observabilidad-tempo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: tempo
+    targetRevision: 1.10.3
+    helm:
+      releaseName: tempo
+      values: |
+        fullnameOverride: tempo
+        tempo:
+          retention: 72h
+          resources:
+            requests: { cpu: 25m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 1Gi }
+          receivers:
+            otlp:
+              protocols:
+                grpc: { endpoint: "0.0.0.0:4317" }
+                http: { endpoint: "0.0.0.0:4318" }
+          metricsGenerator:
+            enabled: true
+            remoteWriteUrl: http://monitoreo-prometheus.observabilidad.svc.cluster.local:9090/api/v1/write
+        persistence:
+          enabled: true
+          storageClassName: managed-csi
+          size: 5Gi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observabilidad
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

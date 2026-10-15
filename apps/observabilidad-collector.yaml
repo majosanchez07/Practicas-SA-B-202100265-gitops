@@ -1,0 +1,110 @@
+# ==============================================================================
+# OpenTelemetry Collector — Practica 10
+#
+# Maria Jose Tebalan Sanchez — 202100265
+#
+# El unico destino de la telemetria de los servicios. Recibe OTLP y reparte:
+#
+#   trazas   -> Tempo (OTLP gRPC)
+#   metricas -> endpoint Prometheus :8889, que recolecta Prometheus
+#
+# Los registros NO pasan por aqui: los servicios escriben JSON en stdout y
+# Promtail los lee del nodo. Si el Collector cae, los registros siguen
+# llegando a Loki, y son justamente lo que se necesita para diagnosticar por
+# que cayo.
+#
+# resource_to_telemetry_conversion convierte los atributos de recurso
+# (service.name, service.version, rollout.hash) en etiquetas de cada serie.
+# Es lo que permite al analisis del canary filtrar por rollout_hash. Antes se
+# eliminan los atributos de proceso y host que agregan los SDK: process.pid
+# cambiaria en cada reinicio y multiplicaria las series sin aportar nada.
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observabilidad-collector
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.108.0
+    helm:
+      releaseName: otel-collector
+      values: |
+        fullnameOverride: otel-collector
+        mode: deployment
+        replicaCount: 1
+        image:
+          repository: otel/opentelemetry-collector-contrib
+          tag: 0.111.0
+        resources:
+          requests: { cpu: 25m, memory: 128Mi }
+          limits: { cpu: 500m, memory: 512Mi }
+        ports:
+          metricas-app:
+            enabled: true
+            containerPort: 8889
+            servicePort: 8889
+            protocol: TCP
+          jaeger-compact: { enabled: false }
+          jaeger-thrift: { enabled: false }
+          jaeger-grpc: { enabled: false }
+          zipkin: { enabled: false }
+        config:
+          receivers:
+            jaeger: null
+            zipkin: null
+            prometheus: null
+            otlp:
+              protocols:
+                grpc: { endpoint: "0.0.0.0:4317" }
+                http: { endpoint: "0.0.0.0:4318" }
+          processors:
+            memory_limiter:
+              check_interval: 5s
+              limit_percentage: 80
+              spike_limit_percentage: 25
+            batch: {}
+            resource/limpiar:
+              attributes:
+                - action: delete
+                  pattern: ^(process|host|os|telemetry)\..*
+          exporters:
+            debug: null
+            otlp/tempo:
+              endpoint: tempo.observabilidad.svc.cluster.local:4317
+              tls: { insecure: true }
+            prometheus:
+              endpoint: 0.0.0.0:8889
+              resource_to_telemetry_conversion:
+                enabled: true
+              # Una version retirada por el canary deja de enviar datos: sus
+              # series desaparecen a los 5 minutos en lugar de quedar fijas.
+              metric_expiration: 5m
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, batch]
+                exporters: [otlp/tempo]
+              metrics:
+                receivers: [otlp]
+                processors: [memory_limiter, resource/limpiar, batch]
+                exporters: [prometheus]
+              logs: null
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observabilidad
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
