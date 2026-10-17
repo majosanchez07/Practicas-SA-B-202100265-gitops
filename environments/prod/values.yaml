@@ -185,7 +185,7 @@ services:
     # Es el que debe detectar la alerta por consumo del presupuesto de error.
     # --------------------------------------------------------------------------
     fault:
-      enabled: false
+      enabled: true
       latenciaMs: 400
       tasaError: 0.6
     # Practica 9: resiliencia ante perdida de nodo.
